@@ -1,15 +1,12 @@
 package model;
 
+import java.lang.reflect.InvocationTargetException;
 
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-
-import javax.swing.JOptionPane; 
-import javax.swing.SwingWorker;
-import javax.swing.Timer; 
+import javax.swing.SwingUtilities;
 
 import model.ai.AI;
 import model.ai.AdvancedAI;
+import model.ai.GreedyAI;
 import model.ai.RandomAI;
 import model.placementstrategy.ArbitraryStrategy;
 import model.placementstrategy.RandomStrategy;
@@ -17,14 +14,23 @@ import observer.AbstractListenableModel;
 import piece.Coordinates;
 import piece.Piece;
 
-
-// Pour hassan
+/**
+ * A single-player game session.
+ *
+ * <p>The player has {@link GameConfig#MAX_ACTIONS} actions (a move or a rotation)
+ * to pack the pieces as tightly as possible. The final score is
+ * {@code boardArea - boundingRectangleArea}: the higher, the better.</p>
+ */
 public class Game extends AbstractListenableModel {
-    protected Plateau board; // le plateau de jeu
-    protected int score; // le score
-    protected int remainingActions; // le nombre d'action restantes
+    protected Plateau board;
+    protected int score;
+    protected int remainingActions;
     protected boolean onGoing;
-    protected boolean isAIplaying;
+    protected volatile boolean isAIplaying;
+
+    private volatile int aiDelay = GameConfig.AI_MOVE_DELAY_MS;
+    private volatile boolean aiStopRequested;
+    private Thread aiThread;
 
     public Game(Plateau board) {
         this.board = board;
@@ -34,80 +40,100 @@ public class Game extends AbstractListenableModel {
     }
 
     /**
-     * Methode pour démarrer le jeu. Elle utilise un nouveau plateau et reinitilise le score et le nombre d'action restante
+     * Start (or restart) a game: clear the board, place the pieces with the
+     * selected placement strategy and reset the score and the action counter.
      */
     public void start() {
-        // On crée un nouveau plateau avec la largeur et la hauteur souhaitées
-        //Initialise le plateau avec la configuration initial
+        stopAI();
         board.reset();
-        board.initialConfigTmp();
+        board.initialConfig();
 
-        
         this.score = 0;
         this.remainingActions = GameConfig.MAX_ACTIONS;
         this.onGoing = true;
+        this.board.setEnabled(true);
+        onStart();
         this.fireChangement();
     }
 
+    /** Hook for subclasses, called by {@link #start()} before listeners are notified. */
+    protected void onStart() {
+    }
+
     /**
-     * Determine si on peut bouger une piece ou pas car le jouer a un nombre max d'actions
-     * @return
+     * @return whether the player still has actions left in a running game
      */
     public boolean canMove() {
-        return (this.remainingActions > 0);
+        return onGoing && this.remainingActions > 0;
     }
 
-    public boolean movePiece(Piece piece, Coordinates position){
-        boolean success = false;
-        if(canMove()) {
-            success = this.board.movePiece(piece, position);
-            if(success == true) 
-                this.remainingActions--;
-            
-            this.fireChangement();
-        } else {
-            this.gameOver();
+    public boolean movePiece(Piece piece, Coordinates position) {
+        if (!canMove()) {
+            return false;
         }
-        
+        int areaBefore = board.evaluate();
+        boolean success = this.board.movePiece(piece, position);
+        afterAction(success, areaBefore);
         return success;
     }
 
-    public boolean rotatePiece(Piece piece, boolean clockwise){
-        boolean success = false;
-        if(canMove()) {
-            if(clockwise == true) { 
-                success = this.board.rotateClockWisePiece(piece);
-            } else {
-                success = this.board.rotateAntiClockWisePiece(piece);
-            }
-
-            if(success) {
-                this.remainingActions--;
-            }
-            
-            this.fireChangement();
-        } else {
-            this.gameOver();
+    public boolean rotatePiece(Piece piece, boolean clockwise) {
+        if (!canMove()) {
+            return false;
         }
+        int areaBefore = board.evaluate();
+        boolean success = clockwise
+                ? this.board.rotateClockWisePiece(piece)
+                : this.board.rotateAntiClockWisePiece(piece);
+        afterAction(success, areaBefore);
         return success;
     }
 
+    private void afterAction(boolean success, int areaBefore) {
+        if (success) {
+            this.remainingActions--;
+            onSuccessfulAction(areaBefore, board.evaluate());
+        }
+        if (remainingActions <= 0) {
+            gameOver();
+        } else {
+            this.fireChangement();
+        }
+    }
 
-   /**
-     * Elle retroune le score: elle appelle le methode evaluate de plateau
-     * @return
+    /**
+     * Hook for subclasses, called after each action that consumed an action point.
+     * @param areaBefore bounding area before the action
+     * @param areaAfter bounding area after the action
+     */
+    protected void onSuccessfulAction(int areaBefore, int areaAfter) {
+    }
+
+    /**
+     * @return the final score (only meaningful once the game is over)
      */
     public int getScore() {
         return this.score;
     }
 
-    
-    public void calculateScore(){
-    
-        this.score = (board.getHeight() * board.getWidth()) - Evaluateur.calculerAireRectangle(board.getPieces());
+    /**
+     * @return the score the player would get if the game ended now
+     */
+    public int getCurrentScore() {
+        return (board.getHeight() * board.getWidth()) - board.evaluate();
     }
 
+    public void calculateScore() {
+        this.score = getCurrentScore();
+    }
+
+    /**
+     * End the game and compute the final score. Calling it twice has no extra effect.
+     */
     public void gameOver() {
+        if (!onGoing) {
+            return;
+        }
         calculateScore();
         this.onGoing = false;
         this.fireChangement();
@@ -121,38 +147,100 @@ public class Game extends AbstractListenableModel {
         playAI(new AdvancedAI());
     }
 
+    public void playGreedyAI() {
+        playAI(new GreedyAI());
+    }
+
     /**
-     * Elle fait jouer le joueur IA
+     * Let an AI play the remaining actions on a background thread.
+     * Every AI move is executed on the Swing event thread (so the views never see
+     * a half-updated board), with {@link #getAIDelay()} ms between two moves.
+     * The AI stops when the game ends, when {@link #stopAI()} is called, or after
+     * {@link GameConfig#AI_MAX_IDLE_TURNS} turns in a row without progress.
+     *
+     * @return whether the AI was started
      */
-    public void playAI(AI ai) {
-        if(!isOnGoing())
-            return;
-        
+    public synchronized boolean playAI(AI ai) {
+        if (!isOnGoing() || isAIplaying) {
+            return false;
+        }
         this.isAIplaying = true;
+        this.aiStopRequested = false;
         this.board.setEnabled(false);
-        Game tmp = this;
+        this.fireChangement();
 
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                while (canMove() && tmp.isOnGoing()) {
-                    ai.nextMove(tmp);
-                    Thread.sleep(1000);
+        aiThread = new Thread(() -> runAI(ai), "ai-player");
+        aiThread.setDaemon(true);
+        aiThread.start();
+        return true;
+    }
+
+    private void runAI(AI ai) {
+        int idleTurns = 0;
+        try {
+            while (canMove() && !aiStopRequested) {
+                int before = remainingActions;
+                runOnEdt(() -> ai.nextMove(this));
+                idleTurns = (remainingActions == before) ? idleTurns + 1 : 0;
+                if (idleTurns >= GameConfig.AI_MAX_IDLE_TURNS) {
+                    break; // the AI cannot find a legal or useful move any more
                 }
-                
-                tmp.isAIplaying = false;
-                tmp.board.setEnabled(true);
-                tmp.onGoing = false;
-                tmp.gameOver();
-                return null;
+                Thread.sleep(aiDelay);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            boolean stoppedByUser = aiStopRequested;
+            runOnEdt(() -> {
+                isAIplaying = false;
+                board.setEnabled(true);
+                if (!stoppedByUser) {
+                    gameOver();
+                }
+                fireChangement();
+            });
+        }
+    }
 
-            @Override
-            protected void done() {
-            }
-        };
+    private static void runOnEdt(Runnable r) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            r.run();
+            return;
+        }
+        try {
+            SwingUtilities.invokeAndWait(r);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (InvocationTargetException e) {
+            throw new IllegalStateException("AI move failed", e.getCause());
+        }
+    }
 
-        worker.execute();
+    /**
+     * Ask the running AI to stop after its current move. The game keeps going
+     * and the human player can continue with the remaining actions.
+     */
+    public void stopAI() {
+        aiStopRequested = true;
+        Thread t = aiThread;
+        if (t != null) {
+            t.interrupt();
+        }
+    }
+
+    public boolean isAIPlaying() {
+        return isAIplaying;
+    }
+
+    /**
+     * @param ms delay between two AI moves, clamped to the slider bounds
+     */
+    public void setAIDelay(int ms) {
+        this.aiDelay = Math.max(0, ms);
+    }
+
+    public int getAIDelay() {
+        return aiDelay;
     }
 
     public Plateau getBoard() {
@@ -167,24 +255,27 @@ public class Game extends AbstractListenableModel {
         return onGoing;
     }
 
-    public boolean useRandomPlacementStrategy(boolean yes) {
-        if(onGoing == true) {
-            return false;
-        }
-
-        if(yes == true) {
-            this.board.setPlacementStrategy(new RandomStrategy());
-        } else {
-            this.board.setPlacementStrategy(new ArbitraryStrategy()); 
-        }
-
-        return true;
+    /**
+     * Restore a saved state (used by {@link GameSerializer}).
+     */
+    public void restoreState(int remainingActions, int score, boolean onGoing) {
+        stopAI();
+        this.remainingActions = remainingActions;
+        this.score = score;
+        this.onGoing = onGoing;
+        this.board.setEnabled(true);
+        this.fireChangement();
     }
 
-    
-
-    
-
-
-
+    public boolean useRandomPlacementStrategy(boolean yes) {
+        if (onGoing) {
+            return false;
+        }
+        if (yes) {
+            this.board.setPlacementStrategy(new RandomStrategy());
+        } else {
+            this.board.setPlacementStrategy(new ArbitraryStrategy());
+        }
+        return true;
+    }
 }

@@ -7,7 +7,7 @@ import java.util.Map;
 
 import piece.observer.AbstractListenableModel;
 
-public abstract class Piece extends AbstractListenableModel {
+public abstract class Piece extends AbstractListenableModel implements PieceModel {
     protected final int width;
     protected final int height;
     protected int orientation; // 0 for North, 1 for East, 2 for south, 3 for west
@@ -21,8 +21,10 @@ public abstract class Piece extends AbstractListenableModel {
      * @param orientation
      */
     public Piece(int width, int height, int orientation) {
-        if(orientation > 3)
-            throw new IllegalArgumentException("Orientation can't be upper than 3");
+        if(orientation < 0 || orientation > 3)
+            throw new IllegalArgumentException("Orientation must be between 0 and 3");
+        if(width <= 0 || height <= 0)
+            throw new IllegalArgumentException("Width and height must be positive");
         
         this.width = width;
         this.height = height;
@@ -42,21 +44,42 @@ public abstract class Piece extends AbstractListenableModel {
         this(width, height, 0);
     }
 
+    /**
+     * Create a new piece with the same shape, base dimensions and orientation.
+     * The clone has no position and no listeners.
+     *
+     * <p>Uses the base {@code width}/{@code height} fields (not the rotated
+     * {@link #getWidth()}/{@link #getHeight()}), otherwise a rotated piece would be
+     * cloned transposed.</p>
+     *
+     * @param piece the piece to copy
+     * @return a fresh copy of the piece
+     */
     public static Piece clone(Piece piece) {
-        Piece clone = null;
-        if(piece.getShape().equals("T")) {
-            clone = new PieceT(piece.getWidth(), piece.getHeight(), piece.getOrientation());
+        switch (piece.getShape()) {
+            case "T": return new PieceT(piece.width, piece.height, piece.orientation);
+            case "R": return new PieceR(piece.width, piece.height, piece.orientation);
+            case "L": return new PieceL(piece.width, piece.height, piece.orientation);
+            case "I": return new PieceI(piece.width, piece.height, piece.orientation);
+            default:
+                throw new IllegalArgumentException("Unknown shape: " + piece.getShape());
         }
-        if(piece.getShape().equals("R")) {
-            clone = new PieceR(piece.getWidth(), piece.getHeight(), piece.getOrientation());
-        }
-        if(piece.getShape().equals("L")) {
-            clone = new PieceL(piece.getWidth(), piece.getHeight(), piece.getOrientation());
-        }
-
-
-        return clone;
     }
+
+    /**
+     * Base (orientation 0) width of the piece.
+     */
+    public int getBaseWidth() {
+        return width;
+    }
+
+    /**
+     * Base (orientation 0) height of the piece.
+     */
+    public int getBaseHeight() {
+        return height;
+    }
+
     /**
      * Build a matrix for an orientation
      * @return a matrix for an orientation
@@ -144,7 +167,7 @@ public abstract class Piece extends AbstractListenableModel {
      * @return inner center of a piec
      */
     public Coordinates getInnerCenter() {
-        return new Coordinates(getWidth() / 2, getHeight() / 2);
+        return new Coordinates(getHeight() / 2, getWidth() / 2); // x = row, y = column
     }
 
     /**
@@ -169,7 +192,8 @@ public abstract class Piece extends AbstractListenableModel {
      * @return
      */
     public String getKey() {
-        return "" + getShape() + width + height + getOrientation() + "";
+        // separators avoid collisions such as "T" + 3 + 15 vs "T" + 31 + 5
+        return getShape() + "_" + width + "x" + height + "_" + getOrientation();
     }
 
     public void setOutterCenter(int x, int y){
@@ -226,8 +250,6 @@ public abstract class Piece extends AbstractListenableModel {
         // Stocker les coordonnées externes
         List<Coordinates> externalCoordinates = new ArrayList<>();
 
-        int index = 0; 
-
         // Parcourir la petite matrice
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
@@ -239,7 +261,6 @@ public abstract class Piece extends AbstractListenableModel {
 
                     // Stocker les coordonnées externes
                     externalCoordinates.add(new Coordinates(externalX, externalY));
-                    index++;
                 }
             }
         }
@@ -248,93 +269,48 @@ public abstract class Piece extends AbstractListenableModel {
         return externalCoordinates;
     }
 
-    private int[] getOccupiedExternesXCoordinates() { 
-        boolean[][] smallMatrix = this.getCurrentMatrix();
-        int centerX = getOutterCenter().getX();
-        int centerY = getOutterCenter().getY();
-
-        int rows = smallMatrix.length;
-        int cols = smallMatrix[0].length;
-
-        // Stocker les coordonnées externes
-        int[] externalXCoordinates = new int[rows];
-
-        int index = 0;
-
-        // Parcourir la petite matrice
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                int externalX = centerX - rows / 2 + i;
-                externalXCoordinates [i] = externalX;
-                index++;
-            }
+    /**
+     * Return the board rows (useRows = true) or columns (useRows = false)
+     * spanned by the piece's bounding matrix at its current position.
+     * Replaces the two former near-identical X/Y helpers.
+     *
+     * @param useRows true for rows (x), false for columns (y)
+     * @return the spanned rows or columns, in increasing order
+     */
+    public int[] getSpannedCoordinates(boolean useRows) {
+        int size = useRows ? getHeight() : getWidth();
+        int center = useRows ? getOutterCenter().getX() : getOutterCenter().getY();
+        int[] result = new int[size];
+        for (int k = 0; k < size; k++) {
+            result[k] = center - size / 2 + k;
         }
-
-        // Redimensionner le tableau résultant pour éliminer les cases non utilisées
-        return externalXCoordinates;
+        return result;
     }
 
-    private int[] getOccupiedExternesYCoordinates() { 
-        boolean[][] smallMatrix = this.getCurrentMatrix();
-        int centerX = getOutterCenter().getX(); 
-        int centerY = getOutterCenter().getY();
-
-        int rows = smallMatrix.length;
-        int cols = smallMatrix[0].length;
-
-        // Stocker les coordonnées externes
-        int[] externalYCoordinates = new int[cols];
-
-        int index = 0;
-
-        // Parcourir la petite matrice
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                int externalY = centerY - cols / 2 + j;
-                externalYCoordinates [i] = externalY;
-                index++;
-            }
-        }
-
-        // Redimensionner le tableau résultant pour éliminer les cases non utilisées
-        return externalYCoordinates;
+    /** First board row covered by the piece's bounding matrix. */
+    public int getTopRow() {
+        return getOutterCenter().getX() - getHeight() / 2;
     }
 
-
+    /** First board column covered by the piece's bounding matrix. */
+    public int getLeftCol() {
+        return getOutterCenter().getY() - getWidth() / 2;
+    }
 
     /**
      * Return string version of piece
      */
     @Override
     public String toString() {
-        String string="";
+        StringBuilder string = new StringBuilder();
         boolean[][] matrix = getCurrentMatrix();
         for(int i =0; i< getHeight(); i++){
             for(int j = 0; j< getWidth(); j++){
-                if(matrix[i][j]) {
-                    string+=" 1 ";
-                } else {
-                    string+=" . ";                    
-                }
+                string.append(matrix[i][j] ? " 1 " : " . ");
             }
-            string+="\n";
+            string.append("\n");
         }
-        string+="\n";
-        return string;
+        string.append("\n");
+        return string.toString();
     }
-
-    
-
-
-
-
-    
-
-
-
-    
-
-    
-
-
 }
