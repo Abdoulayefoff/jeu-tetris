@@ -1,60 +1,44 @@
 package model.placementstrategy;
-import java.util.*;
 
+import java.util.Random;
+
+import model.GameConfig;
 import model.Plateau;
-import model.ai.RandomAI;
 import piece.Coordinates;
 import piece.Piece;
 import piece.PieceFactory;
-public class RandomStrategy implements PlacementStrategy{
-    
-    public RandomStrategy(){}
 
-    @Override
-    public void initialConfig( Plateau plateau){
-        
-        while (plateau.getPieces().size() < plateau.getNbPieces()) {
-            initialConfigAux(plateau);
-        }
+/**
+ * Places {@code plateau.getNbPieces()} random pieces at random valid positions.
+ *
+ * <p>The number of tries is bounded by {@link GameConfig#PLACEMENT_MAX_ATTEMPTS}: on a
+ * crowded board fewer pieces may be placed, but the method always terminates.</p>
+ */
+public class RandomStrategy implements PlacementStrategy {
 
+    private final Random random;
+
+    public RandomStrategy() {
+        this(new Random());
     }
 
-    public void initialConfigAux( Plateau plateau){
-        // Vider le plateau
+    public RandomStrategy(Random random) {
+        this.random = random;
+    }
+
+    @Override
+    public void initialConfig(Plateau plateau) {
         plateau.reset();
-        int i=0;
-        Random random= new Random();  
-        ArrayList<Integer> exclusionX= new ArrayList<Integer>(); 
-        ArrayList<Integer> exclusionY= new ArrayList<Integer>(); 
-        ArrayList<Integer> exclusionWidth= new ArrayList<Integer>();
-        ArrayList<Integer> exclusionHeight= new ArrayList<Integer>();
-        boolean shouldBreak = false;
-
-        while (i<plateau.getNbPieces() && !shouldBreak){
-            int outerX=RandomAI.generateRandomIntWithExclusionsAndMax(exclusionX, 30);
-            int outerY=RandomAI.generateRandomIntWithExclusionsAndMax(exclusionY, 30);
-            exclusionX.add(outerX);
-            exclusionY.add(outerY);
-            Coordinates outterCenter= new Coordinates(outerX, outerY);
-            PieceFactory pieceFactory_temp=new PieceFactory(); 
-            Piece piece_temp= pieceFactory_temp.buildRandom();
-
-            while(!plateau.validate(piece_temp, outterCenter)){
-            
-                if(exclusionX.size() >= plateau.getHeight() || exclusionY.size() >= plateau.getWidth()){
-                    shouldBreak = true;
-                    break;
-                }
-                outerX=RandomAI.generateRandomIntWithExclusionsAndMax(exclusionX, 30);
-                outerY=RandomAI.generateRandomIntWithExclusionsAndMax(exclusionY, 30);
-                exclusionX.add(outerX);
-                exclusionY.add(outerY);
-                
-                outterCenter = new Coordinates(outerX, outerY);
-                piece_temp= pieceFactory_temp.buildRandom();
-            }
-            plateau.addPiece(piece_temp,outterCenter);
-            i++;
+        PieceFactory factory = new PieceFactory();
+        int attempts = 0;
+        while (plateau.getPieces().size() < plateau.getNbPieces()
+                && attempts < GameConfig.PLACEMENT_MAX_ATTEMPTS) {
+            attempts++;
+            Piece piece = factory.buildRandom();
+            Coordinates center = new Coordinates(
+                    random.nextInt(plateau.getHeight()),   // x = row
+                    random.nextInt(plateau.getWidth()));   // y = column
+            plateau.addPiece(piece, center);
         }
     }
 }

@@ -1,57 +1,52 @@
 package model.validators;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import model.Plateau;
 import piece.Coordinates;
 import piece.Piece;
 
+/**
+ * Rejects positions where the piece would share a cell with another piece.
+ * Only occupied cells count: two bounding matrices may overlap as long as
+ * their filled cells do not.
+ */
 public class OverlappingValidator extends AbstractValidator {
 
-    public static int count =0;
-
     @Override
-    public boolean validate(Plateau plateau, Piece piece, Coordinates toPosition) {
-        boolean isValid = true;
-   
+    protected boolean check(Plateau plateau, Piece piece, Coordinates toPosition) {
+        Piece moved = Piece.clone(piece);
+        moved.setOutterCenter(toPosition.getX(), toPosition.getY());
+        Set<Coordinates> newCells = null;
+
         List<Piece> pieces = plateau.getPieces();
-        for (Piece pieceExistante : pieces) {
-            if(pieceExistante.equals(piece)) {
+        for (Piece other : pieces) {
+            if (other == piece || other.getOutterCenter() == null) {
                 continue;
             }
-
-            if (piecesOverlap(pieceExistante, toPosition, piece)) {
-                isValid = false;
-                break; 
+            if (!boxesIntersect(moved, other)) {
+                continue; // cheap rejection before comparing cells
             }
-        }
-    
-        if(!isValid)
-            return isValid;
-        
-        if(next != null) {
-            return next.validate(plateau, piece, toPosition);
-        }
-    
-        return isValid;
-    }
-    
-   
-    private boolean piecesOverlap(Piece pieceExistante, Coordinates toPosition, Piece newPiece) {
-
-        List<Coordinates> cordonneesExistantes = pieceExistante.getOccupiedExternesCoordinates();
-        Piece copyeNewPiece = Piece.clone(newPiece);
-        copyeNewPiece.setOutterCenter(toPosition.getX(), toPosition.getY());
-        List<Coordinates> newCoordinates = copyeNewPiece.getOccupiedExternesCoordinates();
-    
-        for (Coordinates existingCoord : cordonneesExistantes) {
-            for (Coordinates newCoord : newCoordinates) {
-                if(existingCoord.getX() == newCoord.getX() && existingCoord.getY() == newCoord.getY()){
-                    return true;
+            if (newCells == null) {
+                newCells = new HashSet<>(moved.getOccupiedExternesCoordinates());
+            }
+            for (Coordinates c : other.getOccupiedExternesCoordinates()) {
+                if (newCells.contains(c)) {
+                    return false;
                 }
             }
         }
-        return false;
+        return true;
     }
-    
+
+    private static boolean boxesIntersect(Piece a, Piece b) {
+        int aTop = a.getTopRow();
+        int aLeft = a.getLeftCol();
+        int bTop = b.getTopRow();
+        int bLeft = b.getLeftCol();
+        return aTop <= bTop + b.getHeight() - 1 && bTop <= aTop + a.getHeight() - 1
+                && aLeft <= bLeft + b.getWidth() - 1 && bLeft <= aLeft + a.getWidth() - 1;
+    }
 }

@@ -5,7 +5,8 @@ package piece;
  * Coordinates consist of an x-coordinate and a y-coordinate.
  */
 public class Coordinates {
-    private int x, y; // BP: On préfère déclarer une variables par ligne
+    private int x;
+    private int y;
 
     /**
      * Constructs a new set of coordinates with the specified x and y values.
@@ -62,5 +63,21 @@ public class Coordinates {
     @Override
     public String toString() {
         return "Coordinates (" + x + "," + y + ")";
+    }
+
+    /**
+     * Two coordinates are equal when they point to the same cell.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Coordinates)) return false;
+        Coordinates c = (Coordinates) o;
+        return this.x == c.x && this.y == c.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * x + y;
     }
 }

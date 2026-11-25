@@ -1,44 +1,26 @@
 package model.validators;
 
-import java.util.List; 
-
-import model.Evaluateur; 
 import model.Plateau;
 import piece.Coordinates;
 import piece.Piece;
 
+/**
+ * Rejects positions where part of the piece would leave the board.
+ */
 public class OverflowValidator extends AbstractValidator {
- 
 
     @Override
-    public boolean validate(Plateau plateau, Piece piece, Coordinates toPosition) {
-        boolean isValid = false;
-        Piece copyPiece = Piece.clone(piece);
-        copyPiece.setOutterCenter(toPosition.getX(), toPosition.getY());
-        
-        int midPieceWidth = copyPiece.getWidth() / 2;
-        int midePieceHeight = copyPiece.getHeight() / 2;
+    protected boolean check(Plateau plateau, Piece piece, Coordinates toPosition) {
+        int height = piece.getHeight();
+        int width = piece.getWidth();
 
-        int pieceCenterRow = copyPiece.getOutterCenter().getX();
-        int pieceCenterCol = copyPiece.getOutterCenter().getY();
+        int startRow = toPosition.getX() - height / 2;
+        int endRow = startRow + height - 1;
+        int startCol = toPosition.getY() - width / 2;
+        int endCol = startCol + width - 1;
 
-        int starRowPiece = pieceCenterRow - midePieceHeight;
-        int endRowPiece = pieceCenterRow + midePieceHeight;
-        int startColPiece = pieceCenterCol - midPieceWidth;
-        int endColPiece = pieceCenterCol + midPieceWidth;
-
-        boolean debordement = starRowPiece < 0 || endRowPiece > plateau.getHeight() || startColPiece < 0 || endColPiece > plateau.getWidth();
-
-        isValid  = !debordement;
-
-        if(!isValid)
-            return isValid;
-        
-        if(next != null) {
-            return next.validate(plateau, piece, toPosition);
-        }
-
-        return isValid;
+        return startRow >= 0 && startCol >= 0
+                && endRow < plateau.getHeight()
+                && endCol < plateau.getWidth();
     }
-    
 }
