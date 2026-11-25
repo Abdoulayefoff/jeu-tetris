@@ -1,72 +1,107 @@
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
+import org.junit.jupiter.api.Test;
+
+import piece.Coordinates;
 import piece.Piece;
+import piece.PieceI;
+import piece.PieceL;
+import piece.PieceR;
+import piece.PieceT;
 
-import static org.junit.Assert.*;
-
-public class PieceTest {
+class PieceTest {
 
     @Test
-    public void testPieceConstructor() {
-        // Test constructor with valid parameters
-        Piece piece = new ConcretePiece(3, 4, 1);
+    void constructor_stores_base_dimensions_and_orientation() {
+        Piece piece = new PieceR(3, 5, 0);
         assertEquals(3, piece.getWidth());
-        assertEquals(4, piece.getHeight());
-        assertEquals(1, piece.getOrientation());
+        assertEquals(5, piece.getHeight());
+        assertEquals(0, piece.getOrientation());
+    }
 
-        // Test constructor with invalid orientation
-        try {
-            new ConcretePiece(3, 4, 5);
-            fail("IllegalArgumentException should have been thrown");
-        } catch (IllegalArgumentException e) {
-            // Expected exception
+    @Test
+    void odd_orientation_swaps_current_dimensions() {
+        Piece piece = new PieceR(3, 5, 1);
+        assertEquals(5, piece.getWidth());
+        assertEquals(3, piece.getHeight());
+        assertEquals(3, piece.getBaseWidth());
+        assertEquals(5, piece.getBaseHeight());
+    }
+
+    @Test
+    void invalid_orientation_is_rejected() {
+        assertThrows(IllegalArgumentException.class, () -> new PieceR(3, 4, 5));
+        assertThrows(IllegalArgumentException.class, () -> new PieceR(3, 4, -1));
+    }
+
+    @Test
+    void non_positive_dimensions_are_rejected() {
+        assertThrows(IllegalArgumentException.class, () -> new PieceL(0, 3));
+        assertThrows(IllegalArgumentException.class, () -> new PieceT(3, -1));
+    }
+
+    @Test
+    void clone_keeps_shape_dimensions_and_orientation() {
+        Piece original = new PieceL(3, 5, 1);
+        Piece copy = Piece.clone(original);
+        assertNotSame(original, copy);
+        assertEquals(original.getShape(), copy.getShape());
+        assertEquals(original.getWidth(), copy.getWidth());
+        assertEquals(original.getHeight(), copy.getHeight());
+        assertEquals(original.getOrientation(), copy.getOrientation());
+    }
+
+    @Test
+    void four_clockwise_rotations_restore_orientation() {
+        Piece piece = new PieceT(3, 5, 0);
+        for (int i = 0; i < 4; i++) {
+            piece.rotateClockWise();
         }
+        assertEquals(0, piece.getOrientation());
+        assertEquals(3, piece.getWidth());
     }
 
     @Test
-    public void testClone() {
-        // Test cloning of a piece
-        Piece originalPiece = new ConcretePiece(3, 4, 2);
-        Piece clonedPiece = Piece.clone(originalPiece);
-
-        assertEquals(originalPiece.getWidth(), clonedPiece.getWidth());
-        assertEquals(originalPiece.getHeight(), clonedPiece.getHeight());
-        assertEquals(originalPiece.getOrientation(), clonedPiece.getOrientation());
-    }
-
-    @Test
-    public void testRotateClockwise() {
-        // Test clockwise rotation
-        Piece piece = new ConcretePiece(3, 3, 0);
-        boolean[][] originalMatrix = piece.getCurrentMatrix();
-
+    void clockwise_then_anticlockwise_is_identity() {
+        Piece piece = new PieceL(3, 5, 2);
         piece.rotateClockWise();
-        boolean[][] rotatedMatrix = piece.getCurrentMatrix();
-
-        // Check that the matrix is rotated clockwise
-        assertNotEquals(originalMatrix, rotatedMatrix);
+        assertEquals(3, piece.getOrientation());
+        piece.rotateAntiClockWise();
+        assertEquals(2, piece.getOrientation());
     }
 
-    // Add more test methods for other functionalities of the Piece class
+    @Test
+    void rectangle_occupies_every_cell() {
+        Piece piece = new PieceR(3, 3);
+        piece.setOutterCenter(5, 5);
+        assertEquals(9, piece.getOccupiedExternesCoordinates().size());
+        assertTrue(piece.getOccupiedExternesCoordinates().contains(new Coordinates(4, 4)));
+        assertTrue(piece.getOccupiedExternesCoordinates().contains(new Coordinates(6, 6)));
+    }
 
-    // Example of a concrete class implementing the abstract Piece class for testing
-    private static class ConcretePiece extends Piece {
+    @Test
+    void bar_is_one_cell_wide() {
+        Piece bar = new PieceI(1, 5);
+        bar.setOutterCenter(10, 10);
+        assertEquals("I", bar.getShape());
+        assertEquals(5, bar.getOccupiedExternesCoordinates().size());
+        bar.rotateClockWise();
+        assertEquals(5, bar.getWidth());
+        assertEquals(1, bar.getHeight());
+    }
 
-        public ConcretePiece(int width, int height, int orientation) {
-            super(width, height, orientation);
-        }
+    @Test
+    void spanned_coordinates_and_corners_follow_the_center() {
+        Piece piece = new PieceR(3, 5);
+        piece.setOutterCenter(10, 20);
+        assertArrayEquals(new int[] {8, 9, 10, 11, 12}, piece.getSpannedCoordinates(true));
+        assertArrayEquals(new int[] {19, 20, 21}, piece.getSpannedCoordinates(false));
+        assertEquals(8, piece.getTopRow());
+        assertEquals(19, piece.getLeftCol());
+    }
 
-        @Override
-        protected boolean matrixCellVal(int i, int j, int height, int width) {
-            // Implement the matrixCellVal method for testing
-            return false;
-        }
-
-        @Override
-        public String getShape() {
-            // Implement the getShape method for testing
-            return null;
-        }
+    @Test
+    void keys_do_not_collide() {
+        assertNotEquals(new PieceT(3, 15).getKey(), new PieceT(31, 5).getKey());
     }
 }
-
