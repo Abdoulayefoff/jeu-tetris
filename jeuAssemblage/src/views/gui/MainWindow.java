@@ -1,66 +1,67 @@
 package views.gui;
 
-import javax.swing.*;
-import javax.swing.plaf.nimbus.NimbusLookAndFeel;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
 
 import model.Game;
+import model.MultiplayerGame;
 import observer.ListeningModel;
 
-import java.awt.*;
-
-
+/**
+ * Main window of the game. It hosts the {@link Rendu} panel and keeps its title in sync with the game.
+ */
 public class MainWindow extends JFrame implements ListeningModel {
+
     private static final long serialVersionUID = 7376825297884956163L;
-    Dimension tailleEcran = Toolkit.getDefaultToolkit().getScreenSize();
-    int screenWith = (tailleEcran.width*2/3)+150;
-    int screenheight = (tailleEcran.height*2/3)+100;
 
+    private final Game game;
+    private final BoardView grid;
     private final Rendu zoneRendu;
-	private  BoardView grid;
-    private Game game; 
-
 
     public MainWindow(Game game) {
+        super(Constants.WINDOW_TITLE);
         try {
-            UIManager.setLookAndFeel(new NimbusLookAndFeel());
-        } catch (UnsupportedLookAndFeelException e) {
-        
-            e.printStackTrace();
+            // native file chooser and message boxes; the game itself is custom-painted
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (ReflectiveOperationException | UnsupportedLookAndFeelException e) {
+            // keep the default look and feel
         }
-
         this.game = game;
-		JPanel contentPane= (JPanel)this.getContentPane();
+        this.grid = new BoardView(game, game.getBoard());
+        this.zoneRendu = new Rendu(game, grid);
+        game.addListening(this);
 
-		this.zoneRendu = new Rendu(game);
-		this.grid = new BoardView(game, game.getBoard());
-        this.grid.setLayout(null);
-        
-		contentPane.add(createPage(),BorderLayout.CENTER);
-
-
-		this.setSize(screenWith,screenheight);
-		this.setLocationRelativeTo(null);
-		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); 
-        setResizable(false);
-		
-	}
-
-	private JPanel createPage(){
-		JPanel page = new JPanel(new BorderLayout(50, 30));
-		page.setPreferredSize(new Dimension(300,200));
-		this.zoneRendu.rendu.add(this.grid,BorderLayout.CENTER);
-        
-		page.add(this.zoneRendu.getRenduPanel(),BorderLayout.CENTER);
-		//creation de panel vide pour rejoudre le probleme des margin
-		JPanel south = new JPanel();
-		south.setPreferredSize(new Dimension(1,0));
-		page.add(south,BorderLayout.SOUTH);
-		return page;
-	}
-
-    @Override
-    public void modelUpdtae(Object source) {
-        return;
+        getContentPane().setBackground(Theme.PANEL);
+        getContentPane().add(zoneRendu, BorderLayout.CENTER);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        pack();
+        setMinimumSize(new Dimension(960, 680));
+        setLocationRelativeTo(null);
     }
 
+    public Rendu getZoneRendu() {
+        return zoneRendu;
+    }
+
+    public BoardView getGrid() {
+        return grid;
+    }
+
+    private void updateTitle() {
+        String title = Constants.WINDOW_TITLE;
+        if (game instanceof MultiplayerGame && ((MultiplayerGame) game).isTwoPlayers() && game.isOnGoing()) {
+            title += ", " + Constants.CURRENT_PLAYER_LABEL + ((MultiplayerGame) game).getCurrentPlayer();
+        }
+        setTitle(title);
+    }
+
+    @Override
+    public void modelUpdated(Object source) {
+        SwingUtilities.invokeLater(this::updateTitle);
+    }
 }

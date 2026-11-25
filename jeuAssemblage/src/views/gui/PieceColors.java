@@ -1,46 +1,33 @@
 package views.gui;
 
 import java.awt.Color;
-import java.util.HashMap;
 import java.util.Map;
 
 import model.GameConfig;
 
 /**
- * The {@code PieceColors} class represents a utility class for managing colors associated with different game pieces.
- * It provides a mapping of piece identifiers to their corresponding colors based on the {@code GameConfig}.
+ * Maps a piece shape ("T", "L", "R", "I") to its card colour, as configured in {@link GameConfig}.
  */
 public class PieceColors {
 
-    /** 
-     * A mapping of piece identifiers to their corresponding colors.
-     */
-    private Map<String, Color> colors;
-
-    /**
-     * Constructs a new {@code PieceColors} instance and initializes the color mapping.
-     * The default colors are retrieved from the {@code GameConfig} class.
-     */
-    public PieceColors() {
-        colors = new HashMap<>();
-        colors.put("T", GameConfig.PIECE_T_COLOR);
-        colors.put("L", GameConfig.PIECE_L_COLOR);
-        colors.put("R", GameConfig.PIECE_R_COLOR);
-        
- 
-        colors = Map.of(
+    private static final Map<String, Color> COLORS = Map.of(
             "T", GameConfig.PIECE_T_COLOR,
             "L", GameConfig.PIECE_L_COLOR,
-            "R", GameConfig.PIECE_R_COLOR
-        );
+            "R", GameConfig.PIECE_R_COLOR,
+            "I", GameConfig.PIECE_I_COLOR);
+
+    /** @return the immutable shape → colour mapping */
+    public Map<String, Color> getColors() {
+        return COLORS;
     }
 
-    /**
-     * Returns the mapping of piece identifiers to their corresponding colors.
-     * 
-     * @return A {@code Map} containing piece identifiers as keys and their associated colors as values.
-     */
-    public Map<String, Color> getColors() {
-        return colors;
+    /** @return the colour of a shape, grey for an unknown one */
+    public static Color of(String shape) {
+        return COLORS.getOrDefault(shape, Color.GRAY);
+    }
+
+    /** @return whether text or marks drawn on this card should be dark (light card) */
+    public static boolean isLight(Color c) {
+        return (0.299 * c.getRed() + 0.587 * c.getGreen() + 0.114 * c.getBlue()) > 160;
     }
 }
