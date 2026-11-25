@@ -7,6 +7,16 @@ import java.util.Random;
  */
 public class PieceFactory {
 
+    /** Piece type identifiers accepted by {@link #withPiece(int)}. */
+    public static final int L = 0;
+    public static final int T = 1;
+    public static final int R = 2;
+    public static final int I = 3;
+    /** Number of different piece types. */
+    public static final int PIECE_TYPES = 4;
+
+    private static final Random RANDOM = new Random();
+
     protected int width;
     protected int height;
     protected int orientation;
@@ -52,7 +62,7 @@ public class PieceFactory {
     }
 
     /**
-     * Use custome piece
+     * Use a custom piece type ({@link #L}, {@link #T}, {@link #R} or {@link #I})
      * @param piece
      * @return PieceFactory
      */
@@ -66,12 +76,12 @@ public class PieceFactory {
      * @return a new instance of piece
      */
     public Piece build() {
-        if(piece == 0) {
-            return new PieceL(width, height, orientation);
-        } else if (piece == 1) {
-            return new PieceT(width, height, orientation);
-        } else {
-            return new PieceR(width, height, orientation);
+        switch (piece) {
+            case L:  return new PieceL(width, height, orientation);
+            case T:  return new PieceT(width, height, orientation);
+            case R:  return new PieceR(width, height, orientation);
+            case I:  return new PieceI(width, height, orientation);
+            default: throw new IllegalStateException("Unknown piece type: " + piece);
         }
     }
     
@@ -90,20 +100,18 @@ public class PieceFactory {
      * @param max
      * @return
      */
-    private  int generateRandomOdd(int min, int max) {
-        Random rand = new Random(); 
+    private static int generateRandomOdd(int min, int max) {
         int range = (max - min) / 2 + 1;
-        return rand.nextInt(range) * 2 + min;
+        return RANDOM.nextInt(range) * 2 + min;
     }
 
     /**
      * Set random values for properties
      */
     private void randomValues() {
-        Random rand = new Random(); 
-        this.height = generateRandomOdd(3, 6);
-        this.width = generateRandomOdd(3, 4);
-        this.orientation = rand.nextInt(4);
-        this.piece = rand.nextInt(3);
+        this.piece = RANDOM.nextInt(PIECE_TYPES);
+        this.height = generateRandomOdd(3, 6);                       // 3 or 5
+        this.width = (piece == I) ? 1 : generateRandomOdd(3, 4);     // I is a 1-wide bar
+        this.orientation = RANDOM.nextInt(4);
     }
 }

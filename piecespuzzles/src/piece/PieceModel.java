@@ -2,7 +2,7 @@ package piece;
 
 import java.util.List;
 
-public interface PieceI {
+public interface PieceModel {
     public  String getShape();
     public boolean[][] getCurrentMatrix();
     public int getWidth();
