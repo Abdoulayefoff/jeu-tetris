@@ -1,1 +1,24 @@
 AMELIORATIONS.md
+
+# Maven
+target/
+
+# Ant (legacy build)
+build/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+nbproject/private/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Saved games
+*.partie.json
